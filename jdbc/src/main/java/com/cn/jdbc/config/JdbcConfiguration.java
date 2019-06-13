@@ -1,8 +1,9 @@
 package com.cn.jdbc.config;
 
 
+import com.cn.jdbc.model.Person;
 import com.cn.jdbc.model.PersonRowMapper;
-import com.cn.jdbc.service.SplitterService;
+import com.cn.jdbc.model.User;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.integration.core.MessageSource;
@@ -34,7 +35,7 @@ public class JdbcConfiguration {
     public MessageSource<Object> source() {
 
         JdbcPollingChannelAdapter jdbcPollingChannelAdapter = new JdbcPollingChannelAdapter(dataSource(), "select * from person where mark = 'N'");
-        jdbcPollingChannelAdapter.setUpdateSql("update  person set mark = 'Y' where id = :id");
+        jdbcPollingChannelAdapter.setUpdateSql("update  person set mark = 'Y' where id in (:id)");
         jdbcPollingChannelAdapter.setRowMapper(new PersonRowMapper());
         return jdbcPollingChannelAdapter;
     }
@@ -46,19 +47,30 @@ public class JdbcConfiguration {
         return jdbcMessageHandler;
     }
 
-    @Bean
-    public SplitterService splitterService(){
-        return new SplitterService();
-    }
+
+
 
     @Bean
-    public IntegrationFlow doCopy(){
+    public IntegrationFlow doCopy() {
         return IntegrationFlows
-                .from(source(),s -> s.poller(Pollers.fixedDelay(10)))
-                .split(splitterService())
+                .from(source(), s -> s.poller(Pollers.fixedDelay(10)))
+                .split()
+                .gateway(
+                        f -> f.transform( message -> {
+                                Person person = (Person) message;
+                                User user = new User(person.getId(), person.getName(), person.getAge());
+                                System.out.println(user);
+                                return user;
+
+                        })
+                )
+                .log()
                 .handle(handler())
                 .get();
     }
+
+
+
 
 
 }
